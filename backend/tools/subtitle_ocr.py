@@ -26,7 +26,14 @@ def extract_subtitles(data, text_recogniser, img, raw_subtitles,
     rec_res = rec_res_arg
     # 如果没有检测结果，则获取检测结果
     if dt_box is None or rec_res is None:
-        dt_box, rec_res = text_recogniser.predict(img)
+        if sub_area is not None:
+            x0, y0 = max(0, sub_area.xmin - 16), max(0, sub_area.ymin - 16)
+            x1 = min(img.shape[1], sub_area.xmax + 16)
+            y1 = min(img.shape[0], sub_area.ymax + 16)
+            dt_box, rec_res = text_recogniser.predict(img[y0:y1, x0:x1])
+            dt_box = [[(x + x0, y + y0) for x, y in box] for box in dt_box]
+        else:
+            dt_box, rec_res = text_recogniser.predict(img)
         # rec_res格式为： ("hello", 0.997)
     # 获取文本坐标
     coordinates = get_coordinates(dt_box)
@@ -41,6 +48,9 @@ def extract_subtitles(data, text_recogniser, img, raw_subtitles,
     for content, coordinate in zip(text_res, coordinates):
         text = content[0]
         prob = content[1]
+        if coordinate[3] - coordinate[2] < options.MIN_SUBTITLE_HEIGHT:
+            tqdm.write(f'丢弃小字: {text}')
+            continue
         if sub_area is not None:
             selected = False
             # 初始化超界偏差为0

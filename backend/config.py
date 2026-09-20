@@ -76,6 +76,8 @@ class Config(QConfig):
     thresholdTextSimilarity = RangeConfigItem("Main", "ThresholdTextSimilarity", 80, RangeValidator(0, 100))
     # 字幕提取中置信度低于0.75的不要
     dropScore = RangeConfigItem("Main", "DropScore", 75, RangeValidator(0, 100))
+    # 最小文字框高度：1080p 基准像素，按视频高度缩放；0 关闭过滤
+    minSubtitleHeight = RangeConfigItem("Main", "MinSubtitleHeight", 30, RangeValidator(0, 1000))
     # 字幕区域允许偏差, 0为不允许越界, 0.03表示可以越界3%
     subtitleAreaDeviationRate = RangeConfigItem("Main", "SubtitleAreaDeviationRate", 0, RangeValidator(0, 100))
     # 输出丢失的字幕帧, 仅简体中文,繁体中文,日文,韩语有效, 默认将调试信息输出到: 视频路径/loss

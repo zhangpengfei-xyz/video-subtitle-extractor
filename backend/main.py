@@ -1004,6 +1004,7 @@ class SubtitleExtractor:
         options = {
             'REC_CHAR_TYPE': config.language.value,
             'DROP_SCORE': config.dropScore.value / 100.0,
+            'MIN_SUBTITLE_HEIGHT': config.minSubtitleHeight.value * self.frame_height / 1080,
             'SUB_AREA_DEVIATION_RATE': config.subtitleAreaDeviationRate.value / 100.0,
             'DEBUG_OCR_LOSS': config.debugOcrLoss.value,
             'HARDWARD_ACCELERATOR': self.hardware_accelerator,
