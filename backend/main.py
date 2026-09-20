@@ -1062,7 +1062,7 @@ class SubtitleExtractor:
             except Exception as e:
                 traceback.print_exc()
 
-    def manage_process(pid):
+    def manage_process(self, pid):
         pass
 
 if __name__ == '__main__':

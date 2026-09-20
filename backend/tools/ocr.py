@@ -100,6 +100,8 @@ class OcrRecogniser:
             text_rec_score_thresh=0,
             device=device,
         )
+        if device == 'cpu':
+            kwargs['enable_mkldnn'] = False
         if model_config.DET_MODEL_NAME:
             kwargs['text_detection_model_name'] = model_config.DET_MODEL_NAME
         if model_config.REC_MODEL_NAME:
