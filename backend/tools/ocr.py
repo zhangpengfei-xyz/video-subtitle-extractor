@@ -108,7 +108,11 @@ class OcrRecogniser:
         if model_config.REC_MODEL_NAME:
             kwargs['text_recognition_model_name'] = model_config.REC_MODEL_NAME
 
-        return PaddleOCR(**kwargs)
+        recogniser = PaddleOCR(**kwargs)
+        if device == 'cpu' and config.ocrBackend.value != 'paddle':
+            from backend.tools.ocr_cpu_backend import use_cpu_backend
+            use_cpu_backend(recogniser, model_config, config.ocrBackend.value, kwargs['cpu_threads'])
+        return recogniser
 
 
 def get_coordinates(dt_box):

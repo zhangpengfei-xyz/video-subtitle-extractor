@@ -150,6 +150,9 @@ class SubtitleExtractor:
         self.subtitle_ocr_task_queue.put((self.frame_count, -1, None, None, None, None))
         # 等待子线程完成
         subtitle_ocr_process.join()
+        if subtitle_ocr_process.exitcode != 0:
+            self.subtitle_ocr_task_queue.cancel_join_thread()
+            raise RuntimeError('OCR worker failed; see the worker error above')
         # 打印完成提示
         self.append_output(tr['Main']['FinishProcessFrame'])
         self.append_output(tr['Main']['FinishFindSub'])

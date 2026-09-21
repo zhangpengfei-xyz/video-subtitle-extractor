@@ -52,6 +52,7 @@ class Config(QConfig):
     language = OptionsConfigItem("Main", "Language", "ch", OptionsValidator([name for name in tr["Language"]]))
     # 识别模式设置
     mode = OptionsConfigItem("Main", "Mode", "fast",  OptionsValidator(["auto", "fast", "accurate"]))
+    ocrBackend = OptionsConfigItem("Main", "OcrBackend", "paddle", OptionsValidator(["paddle", "openvino", "onnxruntime"]))
     # 是否生成TXT文本字幕
     generateTxt = ConfigItem("Main", "GenerateTxt", False, BoolValidator())
     # 每张图中同时识别6个文本框中的文本，GPU显存越大，该数值可以设置越大

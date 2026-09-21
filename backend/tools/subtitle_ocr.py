@@ -132,7 +132,7 @@ def paint_chinese_opencv(im, chinese, pos, color):
     return img
 
 
-def ocr_task_consumer(ocr_queue, raw_subtitle_path, sub_area, video_path, options):
+def ocr_task_consumer(ocr_queue, raw_subtitle_path, sub_area, video_path, options, errors):
     """
     消费者： 消费ocr_queue，将ocr队列中的数据取出，进行ocr识别，写入字幕文件中
     :param ocr_queue (current_frame_no当前帧帧号, frame 视频帧, dt_box检测框, rec_res识别结果)
@@ -162,6 +162,7 @@ def ocr_task_consumer(ocr_queue, raw_subtitle_path, sub_area, video_path, option
                 extract_subtitles(data, text_recogniser, frame, raw_subtitles, sub_area, options, dt_box,
                                     rec_res, ocr_loss_debug_path)
             except Exception as e:
+                errors.append(str(e))
                 print(e)
                 break
     finally:
@@ -232,21 +233,24 @@ def subtitle_extract_handler(task_queue, progress_queue, video_path, raw_subtitl
         os.remove(raw_subtitle_path)
     # 创建一个OCR队列，大小建议值8-20
     ocr_queue = queue.Queue(20)
+    errors = []
     # 创建一个OCR事件生产者线程
     ocr_event_producer_thread = Thread(target=ocr_task_producer,
                                        args=(ocr_queue, task_queue, progress_queue, video_path, raw_subtitle_path,),
                                        daemon=True)
     # 创建一个OCR事件消费者提取线程
     ocr_event_consumer_thread = Thread(target=ocr_task_consumer,
-                                       args=(ocr_queue, raw_subtitle_path, sub_area, video_path, options,),
+                                       args=(ocr_queue, raw_subtitle_path, sub_area, video_path, options, errors),
                                        daemon=True)
     # 开启消费者线程
     ocr_event_producer_thread.start()
     # 开启生产者线程
     ocr_event_consumer_thread.start()
     # join方法让主线程任务结束之后，进入阻塞状态，一直等待其他的子线程执行结束之后，主线程再终止
-    ocr_event_producer_thread.join()
     ocr_event_consumer_thread.join()
+    if errors:
+        raise RuntimeError(f'OCR failed: {errors[0]}')
+    ocr_event_producer_thread.join()
 
 
 def async_start(video_path, raw_subtitle_path, sub_area, options):

@@ -32,6 +32,8 @@ def parse_args(argv=None):
                         help='Minimum box height / full video height; default: 40/1080; 0 disables filtering')
     parser.add_argument('--language', choices=list(languages['Language']), default='ch')
     parser.add_argument('--mode', choices=['fast', 'auto', 'accurate'], default='fast')
+    parser.add_argument('--backend', choices=['paddle', 'openvino', 'onnxruntime'], default='paddle',
+                        help='CPU OCR backend; OpenVINO uses FP32; ONNX backends require exported models')
     parser.add_argument('--threads', type=int, default=8,
                         help='Thread count for both OCR and VideoSubFinder; not video segments')
     parser.add_argument('--confidence', type=float, default=75.0, help='OCR confidence percent')
@@ -107,6 +109,7 @@ def extract(args, video):
         staged.symlink_to(video)
         settings = {'Window': {'Interface': 'ch'}, 'Main': {
             'Language': args.language, 'Mode': args.mode, 'HardwareAcceleration': False,
+            'OcrBackend': args.backend,
             'GenerateTxt': False, 'WordSegmentation': False, 'DebugNoDeleteCache': True,
             'VideoSubFinderCpuCores': args.threads,
             'VideoSubFinderDecoder': 'OpenCV', 'DropScore': args.confidence,
@@ -143,7 +146,7 @@ def extract(args, video):
         report = dict(video=str(video), output=str(output), **info, area_pixels=rectangle,
                       min_text_height_pixels=config.minSubtitleHeight.value * info['height'] / HEIGHT_REFERENCE,
                       ocr_threads=config.videoSubFinderCpuCores.value or 8, vsf_threads=config.videoSubFinderCpuCores.value,
-                      mode=args.mode, language=args.language, cues=len(subs),
+                      mode=args.mode, backend=args.backend, language=args.language, cues=len(subs),
                       elapsed_seconds=time.monotonic() - started)
         (work / 'subtitles.srt').replace(output)
         if report_path:
