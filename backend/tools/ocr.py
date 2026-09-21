@@ -102,7 +102,7 @@ class OcrRecogniser:
         )
         if device == 'cpu':
             kwargs['enable_mkldnn'] = False
-            kwargs['cpu_threads'] = 8
+            kwargs['cpu_threads'] = config.videoSubFinderCpuCores.value or 8
         if model_config.DET_MODEL_NAME:
             kwargs['text_detection_model_name'] = model_config.DET_MODEL_NAME
         if model_config.REC_MODEL_NAME:
