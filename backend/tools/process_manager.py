@@ -9,7 +9,6 @@ import platform
 import logging
 import atexit
 import subprocess
-import concurrent.futures
 
 class ProcessManager:
     """
@@ -69,17 +68,12 @@ class ProcessManager:
         return False
     
     def terminate_all(self):
-        """并发终止所有管理的进程"""
-        with concurrent.futures.ThreadPoolExecutor() as executor:
-            futures = []
-            for process_id, process in list(self.processes.items()):
-                if isinstance(process, int):
-                    futures.append(executor.submit(self.terminate_by_pid, process))
-                else:
-                    futures.append(executor.submit(self.terminate_by_process, process))
-            
-            # 等待所有终止操作完成
-            concurrent.futures.wait(futures)
+        """同步终止所有管理的进程，支持解释器退出时调用"""
+        for process in list(self.processes.values()):
+            if isinstance(process, int):
+                self.terminate_by_pid(process)
+            else:
+                self.terminate_by_process(process)
         
         # 清空进程字典
         self.processes.clear()
