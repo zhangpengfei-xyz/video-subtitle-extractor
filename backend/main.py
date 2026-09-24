@@ -96,10 +96,11 @@ class SubtitleExtractor:
         self.subtitle_ocr_progress_queue = None
         # vsf运行状态
         self.vsf_running = False
+        self.vsf_workers = 0  # 实际 VSF 进程数，未使用时为 0
         # 进度监听器列表
         self.progress_listeners = []
 
-    def run(self):
+    def run(self, vsf_workers=1, vsf_overlap=5.0):
         """
         运行整个提取视频的步骤
         """
@@ -133,26 +134,36 @@ class SubtitleExtractor:
         self.capture_frame_with_subtitle_area()
         # 创建一个字幕OCR识别进程
         subtitle_ocr_process = self.start_subtitle_ocr_async()
-        if self.sub_area is not None:
-            if platform.system() in ['Windows', 'Linux', 'Darwin']:
-                # 使用GPU且使用accurate模式时才开放此方法：
-                if self.hardware_accelerator.has_accelerator() and config.mode.value == 'accurate':
-                    self.extract_frame_by_det()
+        try:
+            if self.sub_area is not None:
+                if platform.system() in ['Windows', 'Linux', 'Darwin']:
+                    # 使用GPU且使用accurate模式时才开放此方法：
+                    if self.hardware_accelerator.has_accelerator() and config.mode.value == 'accurate':
+                        self.extract_frame_by_det()
+                    else:
+                        self.extract_frame_by_vsf(vsf_workers, vsf_overlap)
                 else:
-                    self.extract_frame_by_vsf()
+                    self.extract_frame_by_fps()
             else:
                 self.extract_frame_by_fps()
-        else:
-            self.extract_frame_by_fps()
 
-        # 往字幕OCR任务队列中，添加OCR识别任务结束标志
-        # 任务格式为：(total_frame_count总帧数, current_frame_no当前帧, dt_box检测框, rec_res识别结果, 当前帧时间， subtitle_area字幕区域)
-        self.subtitle_ocr_task_queue.put((self.frame_count, -1, None, None, None, None))
-        # 等待子线程完成
-        subtitle_ocr_process.join()
-        if subtitle_ocr_process.exitcode != 0:
+            # 往字幕OCR任务队列中，添加OCR识别任务结束标志
+            # 任务格式为：(total_frame_count总帧数, current_frame_no当前帧, dt_box检测框, rec_res识别结果, 当前帧时间， subtitle_area字幕区域)
+            self.subtitle_ocr_task_queue.put((self.frame_count, -1, None, None, None, None))
+            # 等待子线程完成
+            subtitle_ocr_process.join()
+            if subtitle_ocr_process.exitcode != 0:
+                raise RuntimeError('OCR worker failed; see the worker error above')
+        except BaseException:
+            if subtitle_ocr_process.is_alive():
+                subtitle_ocr_process.terminate()
+                subtitle_ocr_process.join(timeout=3)
+                if subtitle_ocr_process.is_alive():
+                    subtitle_ocr_process.kill()
+                    subtitle_ocr_process.join()
             self.subtitle_ocr_task_queue.cancel_join_thread()
-            raise RuntimeError('OCR worker failed; see the worker error above')
+            self.lock.release()
+            raise
         # 打印完成提示
         self.append_output(tr['Main']['FinishProcessFrame'])
         self.append_output(tr['Main']['FinishFindSub'])
@@ -379,7 +390,7 @@ class SubtitleExtractor:
             self.subtitle_ocr_task_queue.put(task)
         self.video_cap.release()
 
-    def extract_frame_by_vsf(self):
+    def extract_frame_by_vsf(self, max_workers, overlap_seconds):
         """
        通过调用videoSubFinder获取字幕帧
        """
@@ -477,6 +488,7 @@ class SubtitleExtractor:
         if config.videoSubFinderCpuCores.value > 0:
             cpu_count = config.videoSubFinderCpuCores.value
         if platform.system() == 'Windows':
+            self.vsf_workers = 1
             # 定义执行命令
             cmd = f"{path_vsf} --use_cuda -c -r -i \"{self.video_path}\" -o \"{self.temp_output_dir}\" -ces \"{self.vsf_subtitle}\" "
             cmd += f"-te {top_end} -be {bottom_end} -le {left_end} -re {right_end} -nthr {cpu_count} -nocrthr {cpu_count} "
@@ -502,6 +514,10 @@ class SubtitleExtractor:
             cmd += f"--open_video_{config.videoSubFinderDecoder.value.value.lower()} "
             self.vsf_running = True
             try:
+                from backend.tools.vsf_parallel import extract_segments
+                self.vsf_workers = extract_segments(self, cmd, max_workers, overlap_seconds)
+                if self.vsf_workers > 1:
+                    return
                 p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, bufsize=1,
                                     close_fds='posix' in sys.builtin_module_names, shell=True,
                                     start_new_session=True)
@@ -803,6 +819,8 @@ class SubtitleExtractor:
         """
         with open(self.raw_subtitle_path, mode='r', encoding='utf-8') as r:
             lines = r.readlines()
+        if self.vsf_workers > 1:
+            lines.sort(key=lambda line: int(line.split('\t', 1)[0]))
 
         # 用dict按frame_no分组，保留原始顺序
         from collections import OrderedDict

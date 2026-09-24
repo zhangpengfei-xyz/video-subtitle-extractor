@@ -42,7 +42,10 @@ done
 - `--backend paddle|openvino|onnxruntime`：默认 `paddle`。
 - `--crop-bottom 0.3`：默认搜索底部 30%，与 `--crop` 二选一。
 - `--min-text-height-ratio 0.037037`：最小字高占完整视频高度的比例，默认约 40/1080；0 关闭过滤。
-- `--threads 8`：OCR 和 VideoSubFinder 的线程数，默认 8。
+- `--threads 8`：OCR 和每个 VideoSubFinder 进程的线程数，默认 8。
+- OpenCV 图像处理默认 1 线程，可通过环境变量 `OPENCV_FOR_THREADS_NUM` 覆盖。
+- `--vsf-workers 6`：Linux/macOS 默认最多 6 段并行扫描，短视频自动减少分段；设为 1 使用单进程。
+- `--vsf-overlap 5`：分段边界初始重叠秒数，遇到截断字幕自动扩大扫描范围。
 - `--language ch --mode fast`：默认中文、fast 模型；模式可选 `fast|auto|accurate`。
 - `--report result.json`：保存单个视频的处理报告。
 - `--keep-work`：成功后保留中间文件。

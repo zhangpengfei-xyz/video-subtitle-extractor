@@ -35,7 +35,11 @@ def parse_args(argv=None):
     parser.add_argument('--backend', choices=['paddle', 'openvino', 'onnxruntime'], default='paddle',
                         help='CPU OCR backend; OpenVINO uses FP32; ONNX backends require exported models')
     parser.add_argument('--threads', type=int, default=8,
-                        help='Thread count for both OCR and VideoSubFinder; not video segments')
+                        help='Thread count for OCR and each VideoSubFinder process')
+    parser.add_argument('--vsf-workers', type=int, default=6,
+                        help='Parallel VSF segments on Linux/macOS; short videos use fewer; 1 disables splitting')
+    parser.add_argument('--vsf-overlap', type=float, default=5.0, metavar='SECONDS',
+                        help='Initial overlap around VSF segment boundaries; extended for clipped subtitles')
     parser.add_argument('--confidence', type=float, default=75.0, help='OCR confidence percent')
     parser.add_argument('--similarity', type=float, default=85.0, help='Subtitle merge similarity percent')
     parser.add_argument('--area-tolerance', type=float, default=0.0, help='VSE area overflow tolerance percent')
@@ -58,6 +62,10 @@ def parse_args(argv=None):
         parser.error('--crop requires X0 < X1 and Y0 < Y1')
     if args.threads < 1:
         parser.error('--threads must be a positive integer')
+    if args.vsf_workers < 1:
+        parser.error('--vsf-workers must be a positive integer')
+    if not math.isfinite(args.vsf_overlap) or args.vsf_overlap < 0.001:
+        parser.error('--vsf-overlap must be finite and at least 0.001 seconds')
     if len(args.videos) > 1 and args.report:
         parser.error('--report requires a single input')
     return args
@@ -119,6 +127,7 @@ def extract(args, video):
         (work / 'config/config.json').write_text(json.dumps(settings), encoding='utf-8')
         os.chdir(work)
         os.environ.setdefault('QT_QPA_PLATFORM', 'offscreen')
+        os.environ.setdefault('OPENCV_FOR_THREADS_NUM', '1')
         from backend.main import SubtitleExtractor
         from backend.bean.subtitle_area import SubtitleArea
         from backend.config import config
@@ -139,13 +148,14 @@ def extract(args, video):
         extractor.vsf_subtitle = str(runtime_work / 'intermediate/subtitle/raw_vsf.srt')
         extractor.raw_subtitle_path = str(runtime_work / 'intermediate/subtitle/raw.txt')
         extractor.subtitle_output_path = str(runtime_work / 'subtitles.srt')
-        extractor.run()
+        extractor.run(vsf_workers=args.vsf_workers, vsf_overlap=args.vsf_overlap)
         subs = pysrt.open(extractor.subtitle_output_path, encoding='utf-8')
         if not subs:
             raise RuntimeError('VSE produced no subtitles; inspect the retained working directory')
         report = dict(video=str(video), output=str(output), **info, area_pixels=rectangle,
                       min_text_height_pixels=config.minSubtitleHeight.value * info['height'] / HEIGHT_REFERENCE,
                       ocr_threads=config.videoSubFinderCpuCores.value or 8, vsf_threads=config.videoSubFinderCpuCores.value,
+                      vsf_workers=extractor.vsf_workers, vsf_overlap_seconds=args.vsf_overlap,
                       mode=args.mode, backend=args.backend, language=args.language, cues=len(subs),
                       elapsed_seconds=time.monotonic() - started)
         (work / 'subtitles.srt').replace(output)
